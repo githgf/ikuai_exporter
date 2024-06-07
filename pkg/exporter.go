@@ -2,11 +2,12 @@ package pkg
 
 import (
 	"fmt"
-	"github.com/jakeslee/ikuai"
-	"github.com/jakeslee/ikuai/action"
+	"github.com/githgf/ikuai"
+	"github.com/githgf/ikuai/action"
 	"github.com/prometheus/client_golang/prometheus"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -57,25 +58,25 @@ func NewIKuaiExporter(kuai *ikuai.IKuai) *IKuaiExporter {
 		memBuffersDesc: prometheus.NewDesc("ikuai_memory_buffers_bytes", "",
 			[]string{}, nil),
 		lanDeviceDesc: prometheus.NewDesc("ikuai_device_info", "ikuai_device_info",
-			[]string{"id", "mac", "hostname", "ip_addr", "comment"}, nil),
+			[]string{"id", "mac", "hostname", "ip_addr", "comment", "adsl_no"}, nil),
 		lanDeviceCountDesc: prometheus.NewDesc("ikuai_device_count", "",
 			[]string{}, nil),
 		ifaceInfoDesc: prometheus.NewDesc("ikuai_iface_info", "",
-			[]string{"id", "interface", "comment", "internet", "parent_interface", "ip_addr"}, nil),
+			[]string{"id", "interface", "comment", "adsl_no", "internet", "parent_interface", "ip_addr"}, nil),
 		UpDesc: prometheus.NewDesc("ikuai_up", "",
-			[]string{"id"}, nil),
+			[]string{"id", "adsl_no"}, nil),
 		UpTimeDesc: prometheus.NewDesc("ikuai_uptime", "",
-			[]string{"id"}, nil),
+			[]string{"id", "adsl_no"}, nil),
 		streamUpBytesDesc: prometheus.NewDesc("ikuai_network_send_bytes", "",
-			[]string{"id"}, nil),
+			[]string{"id", "adsl_no"}, nil),
 		streamDownBytesDesc: prometheus.NewDesc("ikuai_network_recv_bytes", "",
-			[]string{"id"}, nil),
+			[]string{"id", "adsl_no"}, nil),
 		streamUpSpeedDesc: prometheus.NewDesc("ikuai_network_send_kbytes_per_second", "",
-			[]string{"id"}, nil),
+			[]string{"id", "adsl_no"}, nil),
 		streamDownSpeedDesc: prometheus.NewDesc("ikuai_network_recv_kbytes_per_second", "",
-			[]string{"id"}, nil),
+			[]string{"id", "adsl_no"}, nil),
 		connCountDesc: prometheus.NewDesc("ikuai_network_conn_count", "",
-			[]string{"id"}, nil),
+			[]string{"id", "adsl_no"}, nil),
 	}
 }
 
@@ -105,7 +106,7 @@ func (i *IKuaiExporter) Collect(metrics chan<- prometheus.Metric) {
 			log.Printf("collect ikuai panic, %v", err)
 
 			metrics <- prometheus.MustNewConstMetric(i.UpDesc, prometheus.GaugeValue, 0,
-				"host")
+				"host", "")
 		}
 	}()
 
@@ -159,23 +160,34 @@ func (i *IKuaiExporter) Collect(metrics chan<- prometheus.Metric) {
 		}
 
 		for deviceId, device := range devices {
+			if device.IPAddr == "" {
+				continue
+			}
+			index := strings.LastIndex(device.IPAddr, ".")
+			adslName := fmt.Sprintf("adsl%s", strings.ReplaceAll(device.IPAddr[:index], ".", ""))
+			adslNo := ""
+			vl := GetByInfName(adslName)
+			if vl != nil {
+				adslNo = vl.Username
+			}
+
 			metrics <- prometheus.MustNewConstMetric(i.lanDeviceDesc, prometheus.GaugeValue, 1,
-				deviceId, device.Mac, device.Hostname, device.IPAddr, device.Comment)
+				deviceId, device.Mac, device.Hostname, device.IPAddr, device.Comment, adslNo)
 
 			metrics <- prometheus.MustNewConstMetric(i.streamUpBytesDesc, prometheus.GaugeValue, float64(device.TotalUp),
-				deviceId)
+				deviceId, adslNo)
 
 			metrics <- prometheus.MustNewConstMetric(i.streamDownBytesDesc, prometheus.GaugeValue, float64(device.TotalDown),
-				deviceId)
+				deviceId, adslNo)
 
 			metrics <- prometheus.MustNewConstMetric(i.streamUpSpeedDesc, prometheus.GaugeValue, float64(device.Upload),
-				deviceId)
+				deviceId, adslNo)
 
 			metrics <- prometheus.MustNewConstMetric(i.streamDownSpeedDesc, prometheus.GaugeValue, float64(device.Download),
-				deviceId)
+				deviceId, adslNo)
 
 			metrics <- prometheus.MustNewConstMetric(i.connCountDesc, prometheus.GaugeValue, float64(device.ConnectNum),
-				deviceId)
+				deviceId, adslNo)
 		}
 	}
 
@@ -191,26 +203,26 @@ func (i *IKuaiExporter) Collect(metrics chan<- prometheus.Metric) {
 
 	// Host metric
 	metrics <- prometheus.MustNewConstMetric(i.UpTimeDesc, prometheus.GaugeValue, float64(sysStat.Uptime),
-		"host")
+		"host", "")
 
 	metrics <- prometheus.MustNewConstMetric(i.streamUpBytesDesc, prometheus.GaugeValue, float64(sysStat.Stream.TotalUp),
-		"host")
+		"host", "")
 
 	metrics <- prometheus.MustNewConstMetric(i.streamDownBytesDesc, prometheus.GaugeValue, float64(sysStat.Stream.TotalDown),
-		"host")
+		"host", "")
 
 	metrics <- prometheus.MustNewConstMetric(i.streamUpSpeedDesc, prometheus.GaugeValue, float64(sysStat.Stream.Upload),
-		"host")
+		"host", "")
 
 	metrics <- prometheus.MustNewConstMetric(i.streamDownSpeedDesc, prometheus.GaugeValue, float64(sysStat.Stream.Download),
-		"host")
+		"host", "")
 
 	metrics <- prometheus.MustNewConstMetric(i.connCountDesc, prometheus.GaugeValue, float64(sysStat.Stream.ConnectNum),
-		"host")
+		"host", "")
 
 	// 无报错，up
 	metrics <- prometheus.MustNewConstMetric(i.UpDesc, prometheus.GaugeValue, 1,
-		"host")
+		"host", "")
 }
 
 func (i *IKuaiExporter) interfaceMetrics(metrics chan<- prometheus.Metric, monitorInterface *action.ShowMonitorInterfaceResult) {
@@ -237,26 +249,33 @@ func (i *IKuaiExporter) interfaceMetrics(metrics chan<- prometheus.Metric, monit
 			}
 		}
 
+		// 设置adslNo
+		adslNo := ""
+		vl := GetByInfName(iface.Interface)
+		if vl != nil {
+			adslNo = vl.Username
+		}
+
 		metrics <- prometheus.MustNewConstMetric(i.ifaceInfoDesc, prometheus.GaugeValue, 1,
-			ifaceId, iface.Interface, iface.Comment, internet, parentIface, iface.IPAddr)
+			ifaceId, iface.Interface, iface.Comment, adslNo, internet, parentIface, iface.IPAddr)
 
 		metrics <- prometheus.MustNewConstMetric(i.UpDesc, prometheus.GaugeValue, float64(ifaceUp),
-			ifaceId)
+			ifaceId, adslNo)
 
 		metrics <- prometheus.MustNewConstMetric(i.UpTimeDesc, prometheus.GaugeValue, float64(ifaceUptime),
-			ifaceId)
+			ifaceId, adslNo)
 
 		metrics <- prometheus.MustNewConstMetric(i.streamUpBytesDesc, prometheus.GaugeValue, float64(iface.TotalUp),
-			ifaceId)
+			ifaceId, adslNo)
 
 		metrics <- prometheus.MustNewConstMetric(i.streamDownBytesDesc, prometheus.GaugeValue, float64(iface.TotalDown),
-			ifaceId)
+			ifaceId, adslNo)
 
 		metrics <- prometheus.MustNewConstMetric(i.streamUpSpeedDesc, prometheus.GaugeValue, float64(iface.Upload),
-			ifaceId)
+			ifaceId, adslNo)
 
 		metrics <- prometheus.MustNewConstMetric(i.streamDownSpeedDesc, prometheus.GaugeValue, float64(iface.Download),
-			ifaceId)
+			ifaceId, adslNo)
 
 		ifaceConn, nErr := strconv.ParseInt(iface.ConnectNum, 10, 8)
 		if nErr != nil {
@@ -264,7 +283,7 @@ func (i *IKuaiExporter) interfaceMetrics(metrics chan<- prometheus.Metric, monit
 		}
 
 		metrics <- prometheus.MustNewConstMetric(i.connCountDesc, prometheus.GaugeValue, float64(ifaceConn),
-			ifaceId)
+			ifaceId, adslNo)
 	}
 }
 
