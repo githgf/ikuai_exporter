@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=$(git describe --long --dirty --abbrev=6 --tags)
+version=$(git describe --tags `git rev-list --tags --max-count=1`)
 flags="-X main.buildTime=$(date -u '+%Y-%m-%d_%I:%M:%S%p') -X main.version=$version"
 
 export CGO_ENABLED=0 GOOS=linux

@@ -127,7 +127,7 @@ func (i *IKuaiExporter) Collect(metrics chan<- prometheus.Metric) {
 	if len(sysStat.Cputemp) > 0 {
 		metrics <- prometheus.MustNewConstMetric(i.cpuTempDesc, prometheus.GaugeValue, float64(sysStat.Cputemp[0]))
 	} else {
-		log.Printf("sysStat.Cputemp is empty")
+		//log.Printf("sysStat.Cputemp is empty")
 	}
 
 	for idx, item := range sysStat.Cpu {
@@ -166,10 +166,10 @@ func (i *IKuaiExporter) Collect(metrics chan<- prometheus.Metric) {
 			index := strings.LastIndex(device.IPAddr, ".")
 			adslName := fmt.Sprintf("adsl%s", strings.ReplaceAll(device.IPAddr[:index], ".", ""))
 			adslNo := ""
-			vl := GetByInfName(adslName)
-			if vl != nil {
-				adslNo = vl.Username
-			}
+			vl, _ := GetByInfName(adslName)
+			adslNo = vl.Username
+			//if vl != nil {
+			//}
 
 			metrics <- prometheus.MustNewConstMetric(i.lanDeviceDesc, prometheus.GaugeValue, 1,
 				deviceId, device.Mac, device.Hostname, device.IPAddr, device.Comment, adslNo)
@@ -251,10 +251,10 @@ func (i *IKuaiExporter) interfaceMetrics(metrics chan<- prometheus.Metric, monit
 
 		// 设置adslNo
 		adslNo := ""
-		vl := GetByInfName(iface.Interface)
-		if vl != nil {
-			adslNo = vl.Username
-		}
+		vl, _ := GetByInfName(iface.Interface)
+		adslNo = vl.Username
+		//if vl != nil {
+		//}
 
 		metrics <- prometheus.MustNewConstMetric(i.ifaceInfoDesc, prometheus.GaugeValue, 1,
 			ifaceId, iface.Interface, iface.Comment, adslNo, internet, parentIface, iface.IPAddr)

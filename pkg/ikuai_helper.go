@@ -8,11 +8,12 @@ import (
 	"time"
 )
 
-var vlanMap map[string]*action.VlanData
+var vlanMap *VlanMap
 
 func LoadAll(ik *ikuai.IKuai) {
 	if vlanMap == nil {
-		vlanMap = make(map[string]*action.VlanData)
+		vlanMap = new(VlanMap)
+		vlanMap.Map = make(map[string]action.VlanData)
 	}
 
 	log.Println("开始获取ikuai adsl")
@@ -37,7 +38,8 @@ func LoadAll(ik *ikuai.IKuai) {
 
 			for _, vlan := range rep.Data.VlanData {
 
-				vlanMap[vlan.VlanName] = &vlan
+				vlanMap.writeMap(vlan.VlanName, vlan)
+				//vlanMap[vlan.VlanName] = vlan
 			}
 
 			if num >= rep.Data.VlanTotal {
@@ -52,12 +54,12 @@ func LoadAll(ik *ikuai.IKuai) {
 	log.Println("ikuai adsl 获取完毕")
 }
 
-func GetByInfName(name string) *action.VlanData {
-	return vlanMap[name]
+func GetByInfName(name string) (action.VlanData, bool) {
+	return vlanMap.readMap(name)
 }
 
-func GetAllInf() map[string]*action.VlanData {
-	return vlanMap
+func GetAllInf() map[string]action.VlanData {
+	return vlanMap.Map
 }
 
 func StartLoadIkuaiAsync(ik *ikuai.IKuai) {
